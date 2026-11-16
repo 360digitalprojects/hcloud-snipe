@@ -43,6 +43,8 @@ export function startFakeHcloud({ perPage = 50 }: { perPage?: number } = {}) {
         /** Bodies of every successful POST /servers. */
         created: [] as CreateServerBody[],
         rateLimit: { limit: 3600, remaining: 3600, reset: 0 },
+        /** While true, every request gets 401 regardless of token. */
+        unauthorized: false,
         /** `METHOD /path?query` of every request received. */
         requests: [] as string[],
         nextId: 1,
@@ -120,7 +122,10 @@ export function startFakeHcloud({ perPage = 50 }: { perPage?: number } = {}) {
     async function handle(req: Request): Promise<Response> {
         const url = new URL(req.url);
         state.requests.push(`${req.method} ${url.pathname}${url.search}`);
-        if (req.headers.get("Authorization") !== "Bearer test-token")
+        if (
+            state.unauthorized ||
+            req.headers.get("Authorization") !== "Bearer test-token"
+        )
             return err(401, "unauthorized");
         if (state.rateLimit.remaining <= 0)
             return err(429, "rate_limit_exceeded");

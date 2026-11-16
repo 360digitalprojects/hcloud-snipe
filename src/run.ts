@@ -96,6 +96,9 @@ export function rateLimitedDelay(
 }
 
 /** Polls until the Manifest is Fulfilled (or forever in a Dry run, until aborted). Returns an exit code. */
+/** Consecutive failed polls on 401/403 before the token is treated as invalid. */
+export const AUTH_RETRIES = 12;
+
 export async function run({
     manifest,
     hcloud,
@@ -125,10 +128,12 @@ export async function run({
         });
         return 1;
     };
-    const isFatal = (error: unknown) =>
-        error instanceof FatalError ||
-        (error instanceof HcloudError &&
-            (error.status === 401 || error.status === 403));
+    const isAuthError = (error: unknown) =>
+        error instanceof HcloudError &&
+        (error.status === 401 || error.status === 403);
+    // Hetzner briefly answers 401 to valid tokens during API incidents, so only
+    // give up once auth has failed on every poll for a while.
+    let authFailures = 0;
 
     // Snipes still waiting for Claims, with their resolved resource IDs. Set up inside the
     // loop so rate limits and transient errors at startup are retried like any poll.
@@ -216,9 +221,15 @@ export async function run({
                 return 0;
             }
             delay = nextDelay(interval, hcloud.rateLimit());
+            authFailures = 0;
         } catch (error) {
-            if (isFatal(error)) return fatal(error);
-            if (error instanceof HcloudError && error.status === 429) {
+            if (error instanceof FatalError) return fatal(error);
+            if (isAuthError(error)) {
+                if (++authFailures >= AUTH_RETRIES) return fatal(error);
+                log(
+                    `auth failed (${authFailures}/${AUTH_RETRIES}): ${(error as Error).message}`,
+                );
+            } else if (error instanceof HcloudError && error.status === 429) {
                 delay = rateLimitedDelay(interval, hcloud.rateLimit());
                 log(`rate limited, next poll in ${Math.round(delay / 1000)}s`);
             } else {

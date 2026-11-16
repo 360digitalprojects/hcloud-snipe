@@ -12,6 +12,7 @@ import { createHcloud } from "./hcloud";
 import { type Manifest, manifest as manifestSchema } from "./manifest";
 import {
     type Alert,
+    AUTH_RETRIES,
     formatAlert,
     nextDelay,
     orderable,
@@ -137,17 +138,38 @@ describe("run", () => {
         expect(sightings).toEqual([]);
     });
 
-    test("exits with a fatal Alert on a bad token", async () => {
-        const { code, alerts } = await runTicks([stock({ fsn1: true })], {
-            token: "wrong",
-        });
+    test("exits with a fatal Alert once a bad token keeps failing", async () => {
+        const { code, alerts, logs } = await runTicks(
+            Array.from({ length: AUTH_RETRIES }, () => stock({ fsn1: true })),
+            { token: "wrong" },
+        );
         expect(code).toBe(1);
+        expect(logs).toHaveLength(AUTH_RETRIES - 1);
         expect(alerts).toEqual([
             {
                 kind: "fatal",
                 manifest: "lab",
                 error: "unauthorized: unauthorized",
             },
+        ]);
+    });
+
+    test("rides out a brief 401 from Hetzner", async () => {
+        const { code, alerts, logs } = await runTicks([
+            () => {
+                stock({ fsn1: false })();
+                fake.state.unauthorized = true;
+            },
+            () => {},
+            () => {
+                fake.state.unauthorized = false;
+            },
+        ]);
+        expect(code).toBe(0);
+        expect(alerts).toEqual([]);
+        expect(logs).toEqual([
+            "auth failed (1/12): unauthorized: unauthorized",
+            "auth failed (2/12): unauthorized: unauthorized",
         ]);
     });
 

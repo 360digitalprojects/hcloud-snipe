@@ -143,16 +143,23 @@ export function createAlerter(
     {
         print = console.log,
         log = console.error,
-    }: { print?: (line: string) => void; log?: (line: string) => void } = {},
+        footer,
+    }: {
+        print?: (line: string) => void;
+        log?: (line: string) => void;
+        /** Appended to every message sent to a channel, e.g. a link to act on. */
+        footer?: string;
+    } = {},
 ) {
     const inFlight = new Set<Promise<void>>();
     return {
         alert(alert: Alert) {
             const message = formatAlert(alert);
             print(`${new Date().toISOString()} ${message}`);
+            const sent = footer ? `${message}\n\n${footer}` : message;
             for (const channel of channels) {
                 const sending = channel
-                    .send(alert, message)
+                    .send(alert, sent)
                     .catch((error: unknown) =>
                         log(
                             `alert via ${channel.name} failed: ${error instanceof Error ? error.message : String(error)}`,

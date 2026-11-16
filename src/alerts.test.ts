@@ -150,3 +150,19 @@ test("a failing channel is logged and does not stop the others", async () => {
     await alerter.flush();
     expect(logs).toContain("alert via slack failed: HTTP 500: ok");
 });
+
+test("appends the footer to channel messages but not to stdout", async () => {
+    const sent: string[] = [];
+    const printed: string[] = [];
+    const alerter = createAlerter(
+        [{ name: "test", send: async (_, m) => void sent.push(m) }],
+        {
+            print: (l) => printed.push(l),
+            footer: "Rescale: https://example.com",
+        },
+    );
+    alerter.alert(claim);
+    await alerter.flush();
+    expect(sent).toEqual([`${message}\n\nRescale: https://example.com`]);
+    expect(printed[0]).toEndWith(` ${message}`);
+});

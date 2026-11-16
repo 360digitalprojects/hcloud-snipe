@@ -66,7 +66,9 @@ try {
     );
     process.exit(2);
 }
-const alerter = createAlerter(channels);
+const alerter = createAlerter(channels, {
+    footer: process.env.HCLOUD_SNIPE_ALERT_FOOTER || undefined,
+});
 
 // Explicit handlers: as PID 1 in Docker, unhandled SIGTERM is ignored.
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
